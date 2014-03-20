@@ -4,6 +4,11 @@ require "rubygems/package_task"
 Gem::PackageTask.new(eval(File.read("geminabox.gemspec"))) do |pkg|
 end
 
+desc 'Run unicorn'
+task :unicorn do
+  system "bundle exec unicorn_rails -c config/unicorn.rb -D"
+end
+
 desc 'Clear out generated packages'
 task :clean => [:clobber_package]
 

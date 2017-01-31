@@ -1,8 +1,10 @@
+require 'tempfile'
+require 'fileutils'
 
 module Geminabox
   module Proxy
     class Splicer < FileHandler
-      
+
       def self.make(file_name)
         splicer = new(file_name)
         splicer.create
@@ -10,7 +12,15 @@ module Geminabox
       end
 
       def create
-        File.open(splice_path, 'w'){|f| f.write(new_content)}
+        if data = new_content
+          f = Tempfile.create('geminabox')
+          begin
+            f.write(data)
+          ensure
+            f.close rescue nil
+          end
+          FileUtils.mv f.path, splice_path
+        end
       end
 
       def new_content
@@ -47,7 +57,11 @@ module Geminabox
 
       private
       def merge_gziped_content
-        package(unpackage(local_content) | unpackage(remote_content))
+        if rc = remote_content
+          package(unpackage(local_content) | unpackage(rc))
+        else
+          local_content
+        end
       end
 
       def unpackage(content)

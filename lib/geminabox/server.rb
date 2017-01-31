@@ -16,7 +16,11 @@ module Geminabox
       :allow_replace,
       :gem_permissions,
       :allow_delete,
-      :rubygems_proxy
+      :lockfile,
+      :retry_interval,
+      :rubygems_proxy,
+      :ruby_gems_url,
+      :allow_upload
     )
 
     if Server.rubygems_proxy
@@ -32,6 +36,10 @@ module Geminabox
 
       def allow_delete?
         allow_delete
+      end
+
+      def allow_upload?
+        allow_upload
       end
 
       def fixup_bundler_rubygems!
@@ -50,15 +58,19 @@ module Geminabox
           begin
             require 'geminabox/indexer'
             updated_gemspecs = Geminabox::Indexer.updated_gemspecs(indexer)
+            return if updated_gemspecs.empty?
             Geminabox::Indexer.patch_rubygems_update_index_pre_1_8_25(indexer)
             indexer.update_index
             updated_gemspecs.each { |gem| dependency_cache.flush_key(gem.name) }
+          rescue Errno::ENOENT
+            reindex(:force_rebuild)
           rescue => e
             puts "#{e.class}:#{e.message}"
             puts e.backtrace.join("\n")
             reindex(:force_rebuild)
           end
         end
+      rescue Gem::SystemExitException
       end
 
       def indexer
@@ -79,6 +91,8 @@ module Geminabox
     get '/' do
       @gems = load_gems
       @index_gems = index_gems(@gems)
+      @allow_upload = self.class.allow_upload?
+      @allow_delete = self.class.allow_delete?
       erb :index
     end
 
@@ -96,12 +110,23 @@ module Geminabox
     end
 
     get '/upload' do
+      unless self.class.allow_upload?
+        error_response(403, 'Gem uploading is disabled')
+      end
+
       erb :upload
     end
 
     get '/reindex' do
-      self.class.reindex(:force_rebuild)
-      redirect url("/")
+      serialize_update do
+        params[:force_rebuild] ||= 'true'
+        unless %w(true false).include? params[:force_rebuild]
+          error_response(400, "force_rebuild parameter must be either of true or false, but was #{params[:force_rebuild]}")
+        end
+        force_rebuild = params[:force_rebuild] == 'true'
+        self.class.reindex(force_rebuild)
+        redirect url("/")
+      end
     end
 
     get '/gems/:gemname' do
@@ -115,22 +140,39 @@ module Geminabox
       unless self.class.allow_delete?
         error_response(403, 'Gem deletion is disabled - see https://github.com/cwninja/geminabox/issues/115')
       end
-      File.delete file_path if File.exists? file_path
-      self.class.reindex(:force_rebuild)
-      redirect url("/")
+
+      serialize_update do
+        File.delete file_path if File.exist? file_path
+        self.class.reindex(:force_rebuild)
+        redirect url("/")
+      end
+
     end
 
     post '/upload' do
-      unless params[:file] && params[:file][:filename] && (tmpfile = params[:file][:tempfile])
+      unless self.class.allow_upload?
+        error_response(403, 'Gem uploading is disabled')
+      end
+
+      if params[:file] && params[:file][:filename] && (tmpfile = params[:file][:tempfile])
+        serialize_update do
+          handle_incoming_gem(Geminabox::IncomingGem.new(tmpfile))
+        end
+      else
         @error = "No file selected"
         halt [400, erb(:upload)]
       end
-      handle_incoming_gem(Geminabox::IncomingGem.new(tmpfile))
     end
 
     post '/api/v1/gems' do
+      unless self.class.allow_upload?
+        error_response(403, 'Gem uploading is disabled')
+      end
+
       begin
-        handle_incoming_gem(Geminabox::IncomingGem.new(request.body))
+        serialize_update do
+          handle_incoming_gem(Geminabox::IncomingGem.new(request.body))
+        end
       rescue Object => o
         File.open "/tmp/debug.txt", "a" do |io|
           io.puts o, o.backtrace
@@ -139,6 +181,24 @@ module Geminabox
     end
 
   private
+
+    def serialize_update(&block)
+      with_lock(&block)
+    rescue AlreadyLocked
+      halt 503, { 'Retry-After' => settings.retry_interval }, 'Repository lock is held by another process'
+    end
+
+    def with_lock
+      file_class.open(settings.lockfile, File::RDWR | File::CREAT) do |f|
+        raise AlreadyLocked unless f.flock(File::LOCK_EX | File::LOCK_NB)
+        yield
+      end
+    end
+
+    # This method provides a test hook, as stubbing File is painful...
+    def file_class
+      File
+    end
 
     def handle_incoming_gem(gem)
       begin
@@ -186,7 +246,7 @@ HTML
 
     def all_gems_with_duplicates
       specs_files_paths.map do |specs_file_path|
-        if File.exists?(specs_file_path)
+        if File.exist?(specs_file_path)
           Marshal.load(Gem.gunzip(Gem.read_binary(specs_file_path)))
         else
           []
@@ -244,7 +304,7 @@ HTML
         File::open(spec_file, 'r') do |unzipped_spec_file|
           unzipped_spec_file.binmode
           Marshal.load(Gem.inflate(unzipped_spec_file.read))
-        end if File.exists? spec_file
+        end if File.exist? spec_file
       end
 
       def default_platform

@@ -1,20 +1,18 @@
 # Gem in a Box – Really simple rubygem hosting
 [![Build Status](https://secure.travis-ci.org/geminabox/geminabox.png)](http://travis-ci.org/geminabox/geminabox)
 [![Gem Version](https://badge.fury.io/rb/geminabox.png)](http://badge.fury.io/rb/geminabox)
+[![Code Climate](https://codeclimate.com/github/geminabox/geminabox/badges/gpa.svg)](https://codeclimate.com/github/geminabox/geminabox)
 
 Geminabox lets you host your own gems, and push new gems to it just like with rubygems.org.
 The bundler dependencies API is supported out of the box.
 Authentication is left up to either the web server, or the Rack stack.
-For basic auth, try [Rack::Auth](http://rack.rubyforge.org/doc/Rack/Auth/Basic.html).
+For basic auth, try [Rack::Auth](http://www.rubydoc.info/github/rack/rack/Rack/Auth/Basic).
 
 ![screen shot](http://pics.tomlea.co.uk/bbbba6/geminabox.png)
 
 ## System Requirements
 
-    Tested on Mac OS X 10.8.2
-    Ruby 1.9.3-392
-
-    Tests fail on Ruby 2.0.0-p0
+See [.travis.yml](./.travis.yml) for supported ruby versions
 
 ## Server Setup
 
@@ -28,7 +26,7 @@ Create a config.ru as follows:
     Geminabox.data = "/var/geminabox-data" # ... or wherever
     run Geminabox::Server
 
-Start your gem server with 'rackup' to run WEBrick or hook up the config.ru as you normally would ([passenger][passenger], [thin][thin], [unicorn][unicorn], whatever floats your boat).
+Start your gem server with 'rackup' to run WEBrick or hook up the config.ru as you normally would ([passenger](https://www.phusionpassenger.com/), [thin](http://code.macournoyer.com/thin/), [unicorn](https://bogomips.org/unicorn/), whatever floats your boat).
 
 ## Legacy RubyGems index
 
@@ -50,7 +48,7 @@ Or in config.ru (before the run command), set:
 
 If you want Geminabox to carry on providing gems when rubygems.org is unavailable, add this to config.ru:
 
-    Geminabox.allow_remote_failure = true 
+    Geminabox.allow_remote_failure = true
 
 ## HTTP adapter
 
@@ -65,7 +63,7 @@ and specify it in config.ru:
 It is recommend (but not essential) that your adapter inherits from HttpAdapter.
 The adapter will need to replace HttpAdapter's methods with those specific to
 the alternative HTTP gem. It should also be able to handle HTTP proxy
-settings. 
+settings.
 
 Defining your own adapter also allows you to configure Geminabox to use the
 local systems SSL certificates.
@@ -122,12 +120,42 @@ Simples!
       Description:
         Push a gem up to your GemInABox
 
+## Docker
+
+Using Gem in a Box is really simple with the Dockerfile.  Move this Dockerfile into a directory that you want to use for your server.
+
+That directory only needs to contain:
+
+```
+config.ru (explained above)
+Gemfile
+Gemfile.lock
+```
+
+Your Gemfile only needs:
+
+```ruby
+source 'https://rubygems.org'
+
+gem 'geminabox'
+```
+
+From there
+
+```
+docker build -t geminabox .
+```
+
+```
+docker run -d -p 9292:9292 geminabox:latest
+```
+
+Your server should now be running!
+
 ## Licence
 
-Fork it, mod it, choose it, use it, make it better. All under the MIT License.
+[MIT_LICENSE](./MIT-LICENSE)
 
-[WTFBPPL]: http://tomlea.co.uk/WTFBPPL.txt
-[sinatra]: http://www.sinatrarb.com/
-[passenger]: http://www.modrails.com/
-[thin]: http://code.macournoyer.com/thin/
-[unicorn]: http://unicorn.bogomips.org/
+## ChangeLog
+
+[CHANGELOG.md](./CHANGELOG.md)

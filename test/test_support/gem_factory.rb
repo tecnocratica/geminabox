@@ -27,7 +27,7 @@ class GemFactory
     path = @path.join("#{filename.join("-")}.gem")
     FileUtils.mkdir_p File.dirname(path)
 
-    unless File.exists? path
+    unless File.exist? path
       spec = %{
         Gem::Specification.new do |s|
           s.name              = #{name.inspect}
@@ -39,7 +39,7 @@ class GemFactory
           s.files             = []
           s.email             = 'fake@fake.fake'
           s.homepage          = 'http://fake.fake/fake'
-          s.licenses          = ['fake']
+          s.licenses          = ['Nonstandard']
           #{dependencies}
         end
       }
@@ -53,7 +53,7 @@ class GemFactory
         end
       end
 
-      raise "Failed to build gem #{name}" unless File.exists? path
+      raise "Failed to build gem #{name}" unless File.exist? path
     end
     path
   end
